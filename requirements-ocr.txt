@@ -1,0 +1,4 @@
+# Tested OCR runtime: Windows x64, Python 3.12.
+rapidocr==3.9.2
+onnxruntime==1.30.0
+

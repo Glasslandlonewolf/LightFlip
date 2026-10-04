@@ -1,0 +1,13 @@
+# Tested main runtime: Windows x64, Python 3.14.
+Pillow==12.3.0
+tkinterdnd2==0.6.3
+pystray==0.19.5
+pywin32==312
+imageio-ffmpeg==0.6.0
+markitdown[docx,pdf,pptx,xls,xlsx]==0.1.8
+pypdfium2==5.13.0
+PyMuPDF==1.28.2
+python-docx==1.2.0
+python-pptx==1.0.2
+lxml==6.1.3
+
