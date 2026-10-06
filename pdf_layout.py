@@ -295,7 +295,10 @@ def anchored_text(paragraph, obj, scale, identifier):
     rpr=etree.SubElement(run,'{'+W+'}rPr')
     fonts=etree.SubElement(rpr,'{'+W+'}rFonts')
     for key in ['ascii','hAnsi','eastAsia','cs']:
-        fonts.set(qn('w:'+key),font_name(obj['font']))
+        # OCR fonts are exact installed family names. Preserve "Arial Narrow"
+        # rather than reducing it to Arial after computing its line width.
+        family=obj['font'] if 'width_ratio' in obj else font_name(obj['font'])
+        fonts.set(qn('w:'+key),family)
     sz=etree.SubElement(rpr,'{'+W+'}sz')
     sz.set(qn('w:val'),str(max(2,round(obj['size']*scale*2))))
     if 'width_ratio' in obj:
