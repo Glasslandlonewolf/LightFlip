@@ -25,7 +25,7 @@ def conversion_route(path, target):
     target = normalized_format(target)
     if ext == target:
         return None
-    if ext in IMAGES and target in {*IMAGE_TARGETS, 'pdf', 'docx', 'pptx'}:
+    if ext in IMAGES and target in {*IMAGE_TARGETS, 'pdf', 'docx', 'pptx', 'md', 'txt'}:
         return 'direct'
     if ext in AUDIO and target in AUDIO_TARGETS:
         return 'direct'
@@ -57,7 +57,7 @@ def office_available(ext):
     except OSError:
         return False
 
-def convert(source, target_format, mode='pages'):
+def convert(source, target_format, mode='pages', progress=None):
     src = Path(source).resolve()
     target_format = normalized_format(target_format)
     if not src.is_file():
@@ -86,12 +86,15 @@ def convert(source, target_format, mode='pages'):
             temp = pdf
         elif target_format in {'docx', 'pptx'}:
             from office_export import export_office
-            if ext in OFFICE_INPUTS and document_has_pages(src) and mode in {'pages', 'layout'}:
+            if ext in OFFICE_INPUTS and document_has_pages(src) and mode in {'pages', 'layout', 'ocr'}:
                 pdf = work / 'intermediate.pdf'
                 office_pdf(src, pdf, ext)
-                export_office(pdf, temp, target_format, mode)
+                export_office(pdf, temp, target_format, mode, progress=progress)
             else:
-                export_office(src, temp, target_format, mode)
+                export_office(src, temp, target_format, mode, progress=progress)
+        elif target_format in {'txt','md'} and (ext in IMAGES or ext=='pdf'):
+            from office_export import extract_text
+            temp.write_text(extract_text(src,progress),encoding='utf-8')
         elif ext in IMAGES:
             from PIL import Image, ImageOps
             with Image.open(src) as original:
@@ -131,8 +134,8 @@ def convert(source, target_format, mode='pages'):
             if ext in {'txt', 'md'}:
                 text = src.read_text(encoding='utf-8-sig')
             else:
-                from markitdown import MarkItDown
-                text = MarkItDown().convert_local(str(src)).text_content
+                from office_export import extract_text
+                text = extract_text(src,progress)
                 if not text.strip():
                     raise ValueError('没有提取到文字。扫描件可能需要 OCR。')
             temp.write_text(text, encoding='utf-8')
@@ -217,4 +220,3 @@ def office_pdf(src, dst, ext):
                     app.Quit()
             finally:
                 pythoncom.CoUninitialize()
-

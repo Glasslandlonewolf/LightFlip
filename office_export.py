@@ -1,4 +1,4 @@
-"""Office output: explicit page-image or editable-text conversion, no OCR."""
+"""Office output with automatic local OCR reconstruction for image PDFs."""
 import io
 import re
 import unicodedata
@@ -32,35 +32,54 @@ def page_images(src):
             stream.seek(0)
             yield stream, image.width/96, image.height/96
 
-def extract_text(src):
+def extract_text(src,progress=None):
     if src.suffix.lower() in {'.txt', '.md'}:
         text = src.read_text(encoding='utf-8-sig')
+    elif src.suffix.lower()=='.pdf' or src.suffix.lower()[1:] in {'png','jpg','jpeg','gif','webp','bmp','tif','tiff'}:
+        from pdf_ocr import extract_document_text
+        text=extract_document_text(src,progress)
     else:
         from markitdown import MarkItDown
         text = MarkItDown().convert_local(str(src)).text_content
+        meaningful=re.sub(r'<!--.*?-->|!\[[^\]]*\]\([^)]*\)','',text,flags=re.S).strip()
+        if not meaningful and src.suffix.lower()[1:] in {'docx','pptx','xlsx','xls'}:
+            from core import office_available,office_pdf
+            if office_available(src.suffix.lower()[1:]):
+                import tempfile
+                from pdf_ocr import extract_document_text
+                with tempfile.TemporaryDirectory(prefix='.lightflip-office-text-',dir=src.parent) as folder:
+                    pdf=Path(folder)/'pages.pdf'
+                    office_pdf(src,pdf,src.suffix.lower()[1:])
+                    text=extract_document_text(pdf,progress)
     if not text.strip():
         raise ValueError('没有可提取的原生文字。扫描件请使用“文件工具 → OCR 提取文字”；图纸可选择“保留页面外观”。')
     # Office XML excludes control characters, preserve tabs/newlines.
     return ''.join(c for c in text if c in '\n\r\t' or ord(c) >= 32)
 
-def export_office(src, dst, fmt, mode):
-    if mode not in {'pages', 'text', 'layout'}:
+def export_office(src, dst, fmt, mode, progress=None):
+    if mode not in {'pages', 'text', 'layout', 'ocr'}:
         raise ValueError('未知转换模式。')
+    if (src.suffix.lower()=='.pdf' or src.suffix.lower()[1:] in {'png','jpg','jpeg','gif','webp','bmp','tif','tiff'}) and mode in {'layout','ocr'}:
+        from pdf_ocr import layout_with_ocr
+        layout_with_ocr(src,dst,fmt,progress=progress,force=mode=='ocr')
+        return
+    if mode=='ocr':
+        raise ValueError('图片文字重建适用于图片或 PDF 转 Word / PPT。')
     if mode == 'layout' and src.suffix.lower() == '.pdf':
         from pdf_layout import export_layout
         export_layout(src, dst, fmt)
         return
-    visual = src.suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff'} or (src.suffix.lower() == '.pdf' and mode == 'pages')
+    visual = mode=='pages' and src.suffix.lower() in {'.pdf','.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff'}
     if fmt == 'docx':
         if visual:
             images_to_word(src, dst)
         else:
-            text_to_word(extract_text(src), dst)
+            text_to_word(extract_text(src,progress), dst)
     else:
         if visual:
             images_to_slides(src, dst)
         else:
-            text_to_slides(extract_text(src), src.stem, dst)
+            text_to_slides(extract_text(src,progress), src.stem, dst)
 
 def images_to_word(src, dst):
     from docx import Document
@@ -175,4 +194,3 @@ def text_to_slides(text, title, dst):
             paragraph.font.color.rgb = RGBColor(37, 49, 77)
             paragraph.space_after = Pt(6)
     presentation.save(dst)
-

@@ -15,7 +15,7 @@ class App:
     def __init__(self, reopen_event=None):
         self.reopen_event = reopen_event
         self.root = TkinterDnD.Tk()
-        self.root.title('轻转 · Windows 文件转换')
+        self.root.title('轻转 0.2.0 · Windows 文件转换')
         self.root.geometry('720x650')
         self.root.minsize(680, 630)
         self.root.configure(bg='#f3f5fa')
@@ -118,7 +118,7 @@ class App:
         self.close_popup()
         self.root.deiconify()
         mode = 'pages'
-        if fmt in {'docx', 'pptx'} and any(document_has_pages(f) for f in files):
+        if fmt in {'docx', 'pptx'} and any(document_has_pages(f) or Path(f).suffix.lower()[1:] in {'png','jpg','jpeg','gif','webp','bmp','tif','tiff'} for f in files):
             mode = self.choose_pdf_mode(fmt, files)
             if mode is None:
                 return
@@ -129,7 +129,7 @@ class App:
             good, errors = [], []
             for source in list(files):
                 try:
-                    good.extend(convert(source, fmt, mode=mode))
+                    good.extend(convert(source, fmt, mode=mode, progress=lambda text:self.results.put({'progress':text})))
                 except Exception as e:
                     errors.append(Path(source).name + ': ' + str(e))
             self.results.put((good, errors))
@@ -172,7 +172,8 @@ class App:
 
     def choose_pdf_mode(self, fmt, files=None):
         dialog = tk.Toplevel(self.root)
-        source_label = '文档' if files and any(Path(f).suffix.lower() != '.pdf' for f in files) else 'PDF'
+        source_label = ('图片' if files and all(Path(f).suffix.lower()[1:] in {'png','jpg','jpeg','gif','webp','bmp','tif','tiff'} for f in files)
+                        else '文档' if files and any(Path(f).suffix.lower()!='.pdf' for f in files) else 'PDF')
         dialog.title(source_label + ' 转 ' + self.format_label(fmt))
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -182,11 +183,14 @@ class App:
             dialog.destroy()
         tk.Label(dialog, text='选择转换方式', font=('Microsoft YaHei UI', 14, 'bold')).pack(padx=24, pady=(18, 12))
         tk.Button(dialog, text='保留布局并编辑（文字＋图片）', width=34, command=lambda: choose('layout')).pack(padx=24, pady=4)
-        tk.Label(dialog, text='尽量保留位置和字号；文字可修改，图片可移动或替换。\n扫描图片里的文字仍不可编辑。').pack(padx=24, pady=(0, 12))
+        hint='自动识别图片页文字并重建文字框；尽量保留位置、字号和颜色。\n扫描页的图片和装饰保留为背景，识别结果请校对。'
+        tk.Label(dialog,text=hint).pack(padx=24,pady=(0,12))
+        tk.Button(dialog,text='识别图片文字并编辑（OCR）',width=34,command=lambda:choose('ocr')).pack(padx=24,pady=4)
+        tk.Label(dialog,text='适用于扫描件，或图片中有文字的混合 PDF；每页都做文字识别。').pack(padx=24,pady=(0,12))
         tk.Button(dialog, text='保留页面外观（图纸推荐）', width=34, command=lambda: choose('pages')).pack(padx=24, pady=4)
         tk.Label(dialog, text='每页放入一张图片；文字和图形不能单独编辑。').pack(padx=24, pady=(0, 12))
         tk.Button(dialog, text='提取可编辑文字', width=34, command=lambda: choose('text')).pack(padx=24, pady=4)
-        tk.Label(dialog, text='重新排版文字；不保留原图和原版式，扫描件不做 OCR。').pack(padx=24, pady=(0, 12))
+        tk.Label(dialog,text='重新排版文字；图片和扫描页自动识别，不保留原图和原版式。').pack(padx=24,pady=(0,12))
         tk.Button(dialog, text='取消', command=lambda: choose(None)).pack(pady=(0, 16))
         dialog.grab_set()
         self.root.wait_window(dialog)
@@ -323,4 +327,3 @@ if __name__ == '__main__':
         kernel.SetEvent(event)
     else:
         App(event).root.mainloop()
-

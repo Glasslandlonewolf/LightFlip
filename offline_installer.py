@@ -20,7 +20,7 @@ def install(destination,shortcuts=True):
         raise ValueError('此目录已有其他文件，请选择空目录。')
     destination.mkdir(parents=True,exist_ok=True)
     shutil.copytree(ROOT,destination,dirs_exist_ok=True,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
-    (destination/'lightflip-install.json').write_text(json.dumps({'name':'LightFlipPreview','version':'0.1.0','offline':True}),encoding='utf-8')
+    (destination/'lightflip-install.json').write_text(json.dumps({'name':'LightFlipPreview','version':'0.2.0','offline':True}),encoding='utf-8')
     if shortcuts:
         import win32com.client
         shell=win32com.client.Dispatch('WScript.Shell')
@@ -76,4 +76,3 @@ def start():
 button=tk.Button(root,text='安装轻转',width=18,command=start,font=('Microsoft YaHei UI',12))
 button.pack(pady=12)
 root.mainloop()
-

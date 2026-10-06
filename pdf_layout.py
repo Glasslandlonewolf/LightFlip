@@ -2,6 +2,7 @@
 import io
 import re
 import math
+from pathlib import Path
 
 def image_block_png(block, rect):
     """Render only the original image, never a composite crop of the page."""
@@ -152,13 +153,15 @@ def export_layout(src, dst, fmt):
     else:
         layout_word(src, dst)
 
-def layout_slides(src, dst):
+def layout_slides(src, dst, ocr_pages=None, progress=None):
     from pptx import Presentation
     from pptx.util import Pt
     from pptx.dml.color import RGBColor
     from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
     presentation = Presentation()
     for index, page in enumerate(extract_pages(src)):
+        if progress:
+            progress(f'正在生成可编辑 PPT · 第 {index+1} 页')
         if index == 0:
             scale = min(1, 2800/max(page['width'], page['height']))
             presentation.slide_width = Pt(max(72, page['width']*scale))
@@ -166,6 +169,10 @@ def layout_slides(src, dst):
         scale = min(presentation.slide_width/12700/page['width'], presentation.slide_height/12700/page['height'])
         ox = (presentation.slide_width/12700-page['width']*scale)/2
         oy = (presentation.slide_height/12700-page['height']*scale)/2
+        if ocr_pages and index in ocr_pages:
+            from pdf_ocr import add_ocr_slide
+            add_ocr_slide(presentation,ocr_pages[index],scale,ox,oy)
+            continue
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
         background = slide.shapes.add_picture(io.BytesIO(page['background']), Pt(ox), Pt(oy), width=Pt(page['width']*scale), height=Pt(page['height']*scale))
         background.line.fill.background()
@@ -291,6 +298,11 @@ def anchored_text(paragraph, obj, scale, identifier):
         fonts.set(qn('w:'+key),font_name(obj['font']))
     sz=etree.SubElement(rpr,'{'+W+'}sz')
     sz.set(qn('w:val'),str(max(2,round(obj['size']*scale*2))))
+    if 'width_ratio' in obj:
+        char_spacing=(x1-x0)*(1-obj['width_ratio'])*scale/max(1,len(obj['text'])-1)
+        element=etree.SubElement(rpr,'{'+W+'}spacing')
+        element.set(qn('w:val'),str(round(max(-obj['size']*scale*.15,
+                                           min(obj['size']*scale*.3,char_spacing))*20)))
     if obj['flags'] & 16:
         etree.SubElement(rpr,'{'+W+'}b')
     if obj['flags'] & 2:
@@ -341,7 +353,7 @@ def anchored_rectangle(paragraph, obj, scale, identifier):
     fill(line,rect['color'])
     etree.SubElement(shape,'{'+WPS+'}bodyPr')
 
-def layout_word(src,dst):
+def layout_word(src,dst,ocr_pages=None,progress=None):
     from docx import Document
     from docx.shared import Pt
     from docx.enum.section import WD_SECTION_START
@@ -349,6 +361,12 @@ def layout_word(src,dst):
     document=Document()
     identifier=0
     for index,page in enumerate(extract_pages(src)):
+        if progress:progress(f'正在生成可编辑 Word · 第 {index+1} 页')
+        if ocr_pages and index in ocr_pages:
+            from pdf_ocr import text_objects
+            recognised=ocr_pages[index]
+            page['background']=Path(recognised['background']).read_bytes()
+            page['objects']=text_objects(recognised)
         section=document.sections[0] if index==0 else document.add_section(WD_SECTION_START.NEW_PAGE)
         scale=min(1,1500/max(page['width'],page['height']))
         section.page_width=Pt(page['width']*scale)
@@ -371,4 +389,3 @@ def layout_word(src,dst):
                 identifier+=1
                 anchored_text(paragraph,obj,scale,identifier)
     document.save(dst)
-

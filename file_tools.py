@@ -48,7 +48,7 @@ def available_tools(files):
     extensions = {Path(f).suffix.lower()[1:] for f in files}
     kind = ('image' if extensions <= IMAGES else 'video' if extensions <= VIDEO
             else 'pdf' if extensions == {'pdf'} else None)
-    return [tool for tool in TOOLS if tool.kind == kind and len(files) >= tool.minimum]
+    return [tool for tool in TOOLS if (tool.kind == kind or (tool.key=='ocr' and kind=='image')) and len(files) >= tool.minimum]
 
 
 def tool_runtime():
@@ -115,7 +115,13 @@ def execute_tool(files, key, options=None, progress=None):
         try:
             with tempfile.TemporaryDirectory(prefix='.lightflip-', dir=source.parent) as folder:
                 work = Path(folder)
-                if TOOL_MAP[key].kind == 'image':
+                if key=='ocr':
+                    from pdf_ocr import extract_document_text
+                    temporary=work/'ocr.txt'
+                    temporary.write_text(extract_document_text(source,progress)+'\n',encoding='utf-8')
+                    destinations=[(temporary,source.stem+'-OCR文字')]
+                    note='已识别文字，按页输出 TXT。'
+                elif TOOL_MAP[key].kind == 'image':
                     temporary, note = image_tool(source, work, key, options)
                     destinations = [(temporary, source.stem + '-' + TOOL_MAP[key].label)]
                 elif TOOL_MAP[key].kind == 'pdf':
@@ -370,4 +376,3 @@ def video_tool(source, work, key, options):
             raise ValueError('这个时间没有画面，请填写视频时长内的时间。')
         raise RuntimeError('视频处理未完成：' + diagnostic[-600:])
     return destination, size_note(source, destination) if key == 'video_compress' else ''
-

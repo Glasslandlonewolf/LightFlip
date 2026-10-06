@@ -2,7 +2,7 @@
 
 Windows 本地文件转换与处理工具。拖动文件时按住 **Shift**，在鼠标旁的轮盘选择目标格式；也可以在主窗口拖入文件批量转换。
 
-这是 0.1.0 测试版，适用于 Windows 10 / 11 的 64 位 Intel 或 AMD 电脑。交互参考 FileFlip 的拖放轮盘思路，轻转是独立的 Windows 实现，并非 FileFlip 或 FileFlipper 官方产品。
+这是 0.2.0 测试版，适用于 Windows 10 / 11 的 64 位 Intel 或 AMD 电脑。交互参考 FileFlip 的拖放轮盘思路，轻转是独立的 Windows 实现，并非 FileFlip 或 FileFlipper 官方产品。
 
 ## 下载与安装
 
@@ -22,7 +22,8 @@ Windows 本地文件转换与处理工具。拖动文件时按住 **Shift**，�
 - Word、PowerPoint、Excel、PDF、HTML 等转 Markdown / 文本。
 - 常见音视频转换、视频压缩、静音、提取音频与截帧。
 - 图片裁剪、压缩、缩小、旋转、镜像、黑白、清除 EXIF / GPS 等元数据。
-- 扫描 PDF 中英文 OCR，输出带页码的文本。
+- 图片、扫描 PDF 中英文 OCR，输出带页码的文本或 Markdown。
+- 图片 / 扫描 PDF 转 Word、PowerPoint 时自动识别文字，重建可编辑文字框并修复文字后的背景。
 
 输出保存在原文件旁边，已有同名文件会自动加序号，原文件不被覆盖。文件转换和 OCR 在本机进行，程序的处理流程不上传所选文件。
 
@@ -33,7 +34,9 @@ Windows 本地文件转换与处理工具。拖动文件时按住 **Shift**，�
 - 主窗口支持同类文件批量操作。PDF / 图片合并可以调整顺序。
 - 关闭主窗口后仍在托盘运行。在右下角托盘菜单选择“退出”才会完全关闭；程序不自动设置开机启动。
 - Word / PowerPoint / Excel 输入转 PDF 或图片需要对应 Microsoft Office；没有安装时相应选项不显示。PDF 转 Word / PowerPoint 的输出本身不要求安装 Office。
-- 复杂版式、字体替换、图形叠加与 OCR 阅读顺序可能有偏差，输出请校对。扫描件不能仅靠“可编辑布局”模式获得可编辑文字，请使用 OCR。
+- “保留布局并编辑”在图片页上自动启用 OCR，包括带有原生页脚的扫描页；“识别图片文字并编辑（OCR）”可以强制识别每页，包括混合 PDF 中较小的图片文字。两者适用于 Word 和 PowerPoint，也适用于图片输入。
+- “提取可编辑文字”、直接转 TXT / Markdown 和“文件工具 → OCR 提取文字”共用识别流程；原生 PDF 文字直接提取，图片页做本地 OCR。只有图片的 Office 文档可在安装对应 Microsoft Office 时先渲染再识别。
+- 复杂版式、字体替换、图形叠加与 OCR 阅读顺序可能有偏差，输出请校对。扫描页的照片、图表和装饰保留为图片背景，尚不自动重建成可编辑图表。文字覆盖在复杂照片上时，背景修复可能有痕迹；手写字和低清图片可能漏识别。
 - 图片嵌入 Word / PowerPoint、保留页面外观模式中的文字不可单独编辑。
 - 自动抠图目前未提供。
 - 测试版尚未签名。
@@ -72,7 +75,8 @@ OCR 模型准备工具初始化 RapidOCR 并将其默认模型缓存到 OCR 环�
 | `app.py` / `tool_dialogs.py` | 窗口、拖放轮盘、托盘与操作选项 |
 | `core.py` | 格式选择和转换流程 |
 | `file_tools.py` | 图片、PDF、视频工具 |
-| `office_export.py` / `pdf_layout.py` | Word / PowerPoint 输出及布局重建 |
+| `office_export.py` / `pdf_layout.py` / `pdf_ocr.py` | Word / PowerPoint 输出、布局重建和共用文字提取 |
+| `ocr_layout.py` | OCR 坐标、多尺度识别、相近字体匹配和文字背景修复 |
 | `ai_worker.py` | 独立 OCR 工作进程 |
 | `launcher.py` / `offline_installer.py` | 离线包启动与当前用户安装 |
 | `tools/` | 模型准备与离线打包 |
@@ -86,4 +90,3 @@ OCR 模型准备工具初始化 RapidOCR 并将其默认模型缓存到 OCR 环�
 欢迎在 Issues 提交复现步骤、输入格式、期望结果和实际结果。请用可公开的示例文件，不要上传私人作业、照片或个人资料。
 
 轻转源码采用 **GNU Affero General Public License v3.0 or later（AGPL-3.0-or-later）**，见 [LICENSE](LICENSE)。第三方组件保留各自的许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
