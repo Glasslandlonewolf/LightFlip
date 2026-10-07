@@ -1,7 +1,7 @@
 """Local OCR geometry and conservative text-background reconstruction.
 
 Runs in the OCR environment; no cloud services or additional model downloads.
-Only pixels matching the recognised glyphs are erased. Artwork stays raster.
+Recognised glyphs become text; bounded artwork becomes independent raster assets.
 """
 from pathlib import Path
 import math
@@ -140,7 +140,7 @@ def fit_font(text, glyph_mask, font_choices):
     if not options:
         return {'family': 'Arial', 'size_px': float(th*1.25), 'bold': False, 'italic': False, 'fit': 0.}
     score, family, size, bold, italic, ratio = max(options)
-    if ratio > 1.3 and score < .5:
+    if ratio > 1.12 and score < .55:
         # Texture around small captions can inflate the measured glyph height.
         # Prefer the recognised line's width to an oversized substituted font.
         size /= ratio
@@ -161,8 +161,14 @@ def reconstruct(image, lines, background_path):
     height, width = image.shape[:2]
     for line in lines:
         x0, y0, x1, y1 = line['bbox']
-        ix0, iy0 = max(0, int(x0)), max(0, int(y0))
-        ix1, iy1 = min(width, math.ceil(x1)), min(height, math.ceil(y1))
+        # OCR rectangles can cut through a descender by several pixels. A
+        # little context preserves its complete silhouette before removal.
+        # Single numbers retain the strict crop that protects numbered circles.
+        context_pad=max(2,min(12,round((y1-y0)*.08))) if len(line['text'])>3 else 0
+        # The top is deliberately kept at the detector boundary: extending it
+        # can pick up the preceding line's descenders in a tightly set heading.
+        ix0, iy0 = max(0, int(x0)-context_pad), max(0, int(y0))
+        ix1, iy1 = min(width, math.ceil(x1)+context_pad), min(height, math.ceil(y1)+context_pad)
         crop = image[iy0:iy1, ix0:ix1]
         if not crop.size:
             continue
@@ -174,6 +180,7 @@ def reconstruct(image, lines, background_path):
         centre=crop[max(0,ch//6):max(1,ch-ch//6),max(0,cw//10):max(1,cw-cw//10)]
         bg = dominant_color(centre.reshape(-1,3))
         distance = np.linalg.norm(crop.astype(float)-bg, axis=2)
+        flat=float((distance<12).mean())>.65
         mask = (distance > max(28, float(np.percentile(distance,90))*.30)).astype('uint8')*255
         # Exclude long background lines and large components crossing the box.
         count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
@@ -185,7 +192,8 @@ def reconstruct(image, lines, background_path):
             if area > ch*cw*.70:
                 continue
             touches_edge=left==0 or top==0 or left+bw==cw or top+bh==ch
-            if touches_edge:
+            ordinary_letter=flat and len(line['text'])>3 and bw<ch*2.5 and bh>ch*.30 and area<ch*cw*.18
+            if touches_edge and not ordinary_letter:
                 continue
             glyphs[labels == label] = 255
         yy, xx = np.nonzero(glyphs)
@@ -204,7 +212,6 @@ def reconstruct(image, lines, background_path):
         local[iy0-ly0:iy1-ly0,ix0-lx0:ix1-lx0]=glyphs
         local = cv2.dilate(local, np.ones((radius*2+1,radius*2+1),dtype='uint8'))
         # On flat template panels, exact background fill beats inpainting halos.
-        flat=float((distance<12).mean())>.65
         line['background_flat'] = bool(flat)
         region=cleaned[ly0:ly1,lx0:lx1]
         if flat:
@@ -254,9 +261,12 @@ def process_layout(engine, source, output_dir):
     lines = recognize(engine, image)
     background = Path(output_dir)/('clean-'+Path(source).stem+'.png')
     lines = reconstruct(image, lines, background)
+    from image_layout import separate_artwork
+    lines, images, shapes = separate_artwork(image, lines, background, output_dir)
     # All colors in the protocol are RGB, not OpenCV's BGR.
     for line in lines:
         line['color'] = line['color'][::-1]
         line['background_color'] = line['background_color'][::-1]
     return {'width':image.shape[1], 'height':image.shape[0], 'lines':lines,
-            'background':str(background), 'text':'\n'.join(row['text'] for row in lines)}
+            'background':str(background), 'text':'\n'.join(row['text'] for row in lines),
+            'images':images, 'shapes':shapes}

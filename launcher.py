@@ -16,4 +16,3 @@ except Exception:
     log.write_text(traceback.format_exc(),encoding='utf-8')
     import ctypes
     ctypes.windll.user32.MessageBoxW(None,'启动失败，检查信息已保存到：\n'+str(log),'轻转测试版',16)
-

@@ -32,4 +32,3 @@
 ## 交互来源
 
 拖放轮盘的交互思路参考 FileFlip。轻转是独立的 Windows 实现，不使用其官方身份，不宣称与 FileFlip / FileFlipper 有官方关联。
-

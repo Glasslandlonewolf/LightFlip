@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_FILES = ('app.py', 'core.py', 'file_tools.py', 'office_export.py',
-             'pdf_layout.py', 'pdf_ocr.py', 'ocr_layout.py', 'tool_dialogs.py', 'ai_worker.py',
+             'pdf_layout.py', 'pdf_ocr.py', 'ocr_layout.py', 'image_layout.py', 'tool_dialogs.py', 'ai_worker.py',
              'launcher.py', 'offline_installer.py')
 
 def ignored(directory, names):
@@ -82,7 +82,7 @@ def main():
     if not any((Path(ocr_info['site']) / 'rapidocr/models').glob('*.onnx')):
         parser.error('Prepare OCR models first: use the OCR interpreter to run tools/cache_ocr_models.py')
     destination = args.output.resolve()
-    package = destination / 'LightFlip-offline-0.2.0-win-x64'
+    package = destination / 'LightFlip-offline-0.3.0-win-x64'
     if package.exists():
         parser.error('Package directory already exists. Choose another --output directory.')
     destination.mkdir(parents=True, exist_ok=True)
@@ -117,8 +117,8 @@ def main():
             files[file.relative_to(package).as_posix()] = {
                 'bytes': file.stat().st_size, 'sha256': hashlib.sha256(file.read_bytes()).hexdigest()}
     (package / 'package-manifest.json').write_text(json.dumps(
-        {'name': 'LightFlip', 'version': '0.2.0', 'files': files}, indent=2), encoding='utf-8')
-    archive = destination / '轻转-离线测试版-0.2.0-Windows64位.zip'
+        {'name': 'LightFlip', 'version': '0.3.0', 'files': files}, indent=2), encoding='utf-8')
+    archive = destination / '轻转-离线测试版-0.3.0-Windows64位.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=3) as output:
         for file in sorted(package.rglob('*')):
             if file.is_file():

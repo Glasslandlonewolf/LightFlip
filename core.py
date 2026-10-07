@@ -189,34 +189,62 @@ def office_pdf(src, dst, ext):
     import win32com.client
     pythoncom.CoInitialize()
     app = document = None
+    collection = None
+    previous_settings = {}
     try:
         if ext == 'docx':
+            collection = 'Documents'
             app = win32com.client.DispatchEx('Word.Application')
+            previous_settings['DisplayAlerts'] = app.DisplayAlerts
+            previous_settings['AutomationSecurity'] = app.AutomationSecurity
             app.DisplayAlerts = 0
             app.AutomationSecurity = 3
             document = app.Documents.Open(str(src), ReadOnly=True)
             document.ExportAsFixedFormat(str(dst), 17)
         elif ext == 'pptx':
+            collection = 'Presentations'
             app = win32com.client.DispatchEx('PowerPoint.Application')
+            previous_settings['AutomationSecurity'] = app.AutomationSecurity
             app.AutomationSecurity = 3
             document = app.Presentations.Open(str(src), ReadOnly=True, WithWindow=False)
             document.SaveAs(str(dst), 32)
         else:
+            collection = 'Workbooks'
             app = win32com.client.DispatchEx('Excel.Application')
+            previous_settings['DisplayAlerts'] = app.DisplayAlerts
+            previous_settings['AutomationSecurity'] = app.AutomationSecurity
             app.DisplayAlerts = False
             app.AutomationSecurity = 3
             document = app.Workbooks.Open(str(src), UpdateLinks=0, ReadOnly=True)
             document.ExportAsFixedFormat(0, str(dst))
     finally:
-        try:
-            if document is not None:
+        if document is not None:
+            try:
                 if ext == 'pptx':
                     document.Close()
                 else:
                     document.Close(SaveChanges=False)
-        finally:
+            except Exception:
+                # Cleanup must not replace an export error or close other files
+                # in an Office instance that DispatchEx may have reused.
+                pass
+        if app is not None:
             try:
-                if app is not None:
+                remaining = getattr(app, collection).Count
+            except Exception:
+                remaining = None
+            if remaining == 0:
+                try:
                     app.Quit()
-            finally:
-                pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+            else:
+                for property_name, value in previous_settings.items():
+                    try:
+                        setattr(app, property_name, value)
+                    except Exception:
+                        pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass

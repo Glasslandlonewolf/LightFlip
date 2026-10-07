@@ -174,4 +174,3 @@ def choose_options(parent, files, key):
             messagebox.showerror('请检查输入', str(error), parent=dialog.window)
     dialog.confirm.configure(command=apply)
     return dialog.wait()
-

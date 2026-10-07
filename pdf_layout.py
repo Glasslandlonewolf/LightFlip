@@ -79,7 +79,7 @@ def font_name(name):
             return replacement
     return re.sub(r'[-,](Bold|Italic|Regular).*$', '', name, flags=re.I)
 
-def extract_pages(src):
+def extract_pages(src, skip_objects=None):
     import pymupdf as fitz
     with fitz.open(src) as document:
         if document.needs_pass:
@@ -90,6 +90,12 @@ def extract_pages(src):
                 copy.insert_pdf(document, from_page=index, to_page=index)
                 page = copy[0]
                 page.remove_rotation()
+                if skip_objects and index in skip_objects:
+                    # OCR pages already provide their reconstructed objects and
+                    # repaired background. Do not re-render their original scan.
+                    yield {'width':page.rect.width,'height':page.rect.height,
+                           'objects':[],'background':None}
+                    continue
                 objects = []
                 bboxlog=page.get_bboxlog()
                 image_events=[(n,fitz.Rect(box)) for n,(kind,box) in enumerate(bboxlog) if kind=='fill-image']
@@ -159,7 +165,7 @@ def layout_slides(src, dst, ocr_pages=None, progress=None):
     from pptx.dml.color import RGBColor
     from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
     presentation = Presentation()
-    for index, page in enumerate(extract_pages(src)):
+    for index, page in enumerate(extract_pages(src,skip_objects=ocr_pages)):
         if progress:
             progress(f'正在生成可编辑 PPT · 第 {index+1} 页')
         if index == 0:
@@ -234,7 +240,7 @@ def layout_slides(src, dst, ocr_pages=None, progress=None):
                 run.font.color.rgb = RGBColor((c>>16)&255, (c>>8)&255, c&255)
     presentation.save(dst)
 
-def anchored_picture(paragraph, data, rect, behind=False, vector=False, layer=100):
+def anchored_picture(paragraph, data, rect, behind=False, vector=False, layer=100, name=None):
     from docx.shared import Pt
     from docx.oxml import OxmlElement
     x, y, width, height = rect
@@ -258,8 +264,8 @@ def anchored_picture(paragraph, data, rect, behind=False, vector=False, layer=10
     for child in list(inline):
         if child.tag.endswith('}docPr') or child.tag.endswith('}cNvGraphicFramePr') or child.tag.endswith('}graphic'):
             if child.tag.endswith('}docPr'):
-                child.set('name', '页面图形背景' if behind else '图形标注' if vector else '可替换图片')
-                child.set('descr', '图形背景，文字和独立图片已分离' if behind else '可以移动、缩放或替换的独立图片')
+                child.set('name', name or ('页面图形背景' if behind else '图形标注' if vector else '可替换图片'))
+                child.set('descr', '图形背景，文字和独立图片已分离' if behind else '可以移动、缩放、裁剪或替换的独立图片')
             anchor.append(child)
     inline.getparent().replace(inline, anchor)
 
@@ -319,18 +325,24 @@ def anchored_text(paragraph, obj, scale, identifier):
 
 
 def anchored_rectangle(paragraph, obj, scale, identifier):
+    return anchored_shape(paragraph,dict(obj['native_rect'],seq=obj['seq'],geometry='rect',
+                                        name='页面矩形图形'),scale,identifier)
+
+
+def anchored_shape(paragraph, obj, scale, identifier):
     """Use the same DrawingML paint order as pictures, without PNG edge halos."""
     from lxml import etree
     from docx.oxml.ns import qn
     from PIL import Image
     WPS='http://schemas.microsoft.com/office/word/2010/wordprocessingShape'
-    rect=obj['native_rect']
-    x0,y0,x1,y1=rect['bbox']
+    x0,y0,x1,y1=obj['bbox']
     stream=io.BytesIO()
     Image.new('RGB',(1,1),'white').save(stream,'PNG')
-    anchored_picture(paragraph,stream.getvalue(),(x0*scale,y0*scale,(x1-x0)*scale,(y1-y0)*scale),vector=True,layer=obj['seq']+100)
+    anchored_picture(paragraph,stream.getvalue(),(min(x0,x1)*scale,min(y0,y1)*scale,
+                     max(.01,abs(x1-x0)*scale),max(.01,abs(y1-y0)*scale)),
+                     vector=True,layer=obj['seq']+100,name=obj.get('name','可编辑图形'))
     anchor=paragraph.runs[-1]._r.find('.//'+qn('wp:anchor'))
-    anchor.find(qn('wp:docPr')).set('name','页面矩形图形')
+    anchor.find(qn('wp:docPr')).set('descr','可以单独移动、缩放及修改颜色的图形')
     graphic_data=anchor.find('.//'+qn('a:graphicData'))
     graphic_data.clear()
     graphic_data.set('uri',WPS)
@@ -338,10 +350,13 @@ def anchored_rectangle(paragraph, obj, scale, identifier):
     etree.SubElement(shape,'{'+WPS+'}cNvSpPr')
     props=etree.SubElement(shape,'{'+WPS+'}spPr')
     transform=etree.SubElement(props,qn('a:xfrm'))
+    if obj['geometry']=='line':
+        if x1<x0:transform.set('flipH','1')
+        if y1<y0:transform.set('flipV','1')
     etree.SubElement(transform,qn('a:off'),x='0',y='0')
     extent=anchor.find(qn('wp:extent'))
     etree.SubElement(transform,qn('a:ext'),cx=extent.get('cx'),cy=extent.get('cy'))
-    geometry=etree.SubElement(props,qn('a:prstGeom'),prst='rect')
+    geometry=etree.SubElement(props,qn('a:prstGeom'),prst={'rect':'rect','ellipse':'ellipse','line':'line'}[obj['geometry']])
     etree.SubElement(geometry,qn('a:avLst'))
     def color(value):
         return ''.join(f'{max(0,min(255,round(component*255))):02X}' for component in value)
@@ -351,9 +366,9 @@ def anchored_rectangle(paragraph, obj, scale, identifier):
         else:
             solid=etree.SubElement(parent,qn('a:solidFill'))
             etree.SubElement(solid,qn('a:srgbClr'),val=color(value))
-    fill(props,rect['fill'])
-    line=etree.SubElement(props,qn('a:ln'),w=str(round(rect['width']*scale*12700)))
-    fill(line,rect['color'])
+    fill(props,obj['fill'])
+    line=etree.SubElement(props,qn('a:ln'),w=str(max(0,round(obj['width']*scale*12700))))
+    fill(line,obj['color'])
     etree.SubElement(shape,'{'+WPS+'}bodyPr')
 
 def layout_word(src,dst,ocr_pages=None,progress=None):
@@ -363,13 +378,13 @@ def layout_word(src,dst,ocr_pages=None,progress=None):
     from docx.oxml import OxmlElement
     document=Document()
     identifier=0
-    for index,page in enumerate(extract_pages(src)):
+    for index,page in enumerate(extract_pages(src,skip_objects=ocr_pages)):
         if progress:progress(f'正在生成可编辑 Word · 第 {index+1} 页')
         if ocr_pages and index in ocr_pages:
-            from pdf_ocr import text_objects
+            from pdf_ocr import layout_objects
             recognised=ocr_pages[index]
             page['background']=Path(recognised['background']).read_bytes()
-            page['objects']=text_objects(recognised)
+            page['objects']=layout_objects(recognised)
         section=document.sections[0] if index==0 else document.add_section(WD_SECTION_START.NEW_PAGE)
         scale=min(1,1500/max(page['width'],page['height']))
         section.page_width=Pt(page['width']*scale)
@@ -381,13 +396,16 @@ def layout_word(src,dst,ocr_pages=None,progress=None):
         paragraph.paragraph_format.line_spacing=Pt(1)
         anchored_picture(paragraph,page['background'],(0,0,page['width']*scale,page['height']*scale),behind=True)
         for obj in page['objects']:
-            if obj['kind']=='image':
+            if obj['kind']=='shape':
+                identifier+=1
+                anchored_shape(paragraph,obj,scale,identifier)
+            elif obj['kind']=='image':
                 if obj.get('native_rect'):
                     identifier+=1
                     anchored_rectangle(paragraph,obj,scale,identifier)
                 else:
                     x0,y0,x1,y1=obj['bbox']
-                    anchored_picture(paragraph,obj['data'],(x0*scale,y0*scale,(x1-x0)*scale,(y1-y0)*scale),vector=obj.get('vector',False),layer=obj['seq']+100)
+                    anchored_picture(paragraph,obj['data'],(x0*scale,y0*scale,(x1-x0)*scale,(y1-y0)*scale),vector=obj.get('vector',False),layer=obj['seq']+100,name=obj.get('name'))
             else:
                 identifier+=1
                 anchored_text(paragraph,obj,scale,identifier)

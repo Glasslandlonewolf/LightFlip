@@ -30,7 +30,7 @@ def main(job):
         progress('正在加载本地文字识别和版式重建组件…')
         engine = make_engine()
         for index, source in enumerate(job['files']):
-            progress(f'正在重建可编辑文字 · 第 {index+1}/{len(job["files"])} 页')
+            progress(f'正在重建文字并分离图片 · 第 {index+1}/{len(job["files"])} 页')
             items.append(process_layout(engine, source, job['output_dir']))
     elif job['kind'] == 'ocr':
         import cv2

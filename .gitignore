@@ -13,10 +13,12 @@ build/
 .env
 .env.*
 qa-*/
+.lightflip-*/
+.image-object-test-*/
+.circle-artwork-test-*/
 offline-package/
 *.lnk
 lightflip-install.json
 startup-error.txt
 .DS_Store
 Thumbs.db
-
