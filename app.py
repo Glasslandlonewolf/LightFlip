@@ -15,7 +15,7 @@ class App:
     def __init__(self, reopen_event=None):
         self.reopen_event = reopen_event
         self.root = TkinterDnD.Tk()
-        self.root.title('轻转 0.3.0 · Windows 文件转换')
+        self.root.title('轻转 0.4.0 · Windows 文件转换')
         self.root.geometry('720x650')
         self.root.minsize(680, 630)
         self.root.configure(bg='#f3f5fa')
@@ -183,7 +183,7 @@ class App:
             dialog.destroy()
         tk.Label(dialog, text='选择转换方式', font=('Microsoft YaHei UI', 14, 'bold')).pack(padx=24, pady=(18, 12))
         tk.Button(dialog, text='保留布局并编辑（文字＋图片）', width=34, command=lambda: choose('layout')).pack(padx=24, pady=4)
-        hint='自动重建文字框，分离可识别的照片、小图和简单形状。\n图片可单独移动、缩放、裁剪和替换；复杂版面请校对。'
+        hint='同段文字合并为一个可编辑文段，分离照片、小图和简单形状。\n图片可单独移动、缩放、裁剪和替换；复杂版面请校对。'
         tk.Label(dialog,text=hint).pack(padx=24,pady=(0,12))
         tk.Button(dialog,text='识别图片文字并编辑（OCR）',width=34,command=lambda:choose('ocr')).pack(padx=24,pady=4)
         tk.Label(dialog,text='逐页识别文字并分离图片，适用于扫描件和混合 PDF。').pack(padx=24,pady=(0,12))

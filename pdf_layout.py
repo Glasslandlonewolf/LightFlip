@@ -111,7 +111,7 @@ def extract_pages(src, skip_objects=None):
                         used_image_events.add(seq)
                         objects.append({'kind': 'image', 'bbox': tuple(rect), 'data': image_block_png(block,rect),'seq':seq})
                     elif block['type'] == 0:
-                        for line in block['lines']:
+                        for line_id,line in enumerate(block['lines']):
                             for span in line['spans']:
                                 chars = span['chars']
                                 start, end = 0, len(chars)
@@ -140,6 +140,8 @@ def extract_pages(src, skip_objects=None):
                                         if char[0]==ord(kept[0]['c']):
                                             distance=(char[2][0]-kept[0]['origin'][0])**2+(char[2][1]-kept[0]['origin'][1])**2
                                             candidates.append((distance,trace['seqno']))
+                                item['font']=font_name(item['font'])
+                                item.update(block_id=block['number'],line_id=line_id)
                                 item['seq']=min(candidates)[1] if candidates else len(bboxlog)
                                 objects.append(item)
                 for drawing in page.get_drawings():
@@ -150,7 +152,8 @@ def extract_pages(src, skip_objects=None):
                 page.add_redact_annot(page.rect, fill=False, cross_out=False)
                 page.apply_redactions(images=1, graphics=2, text=0)
                 background = page.get_pixmap(matrix=fitz.Matrix(min(2, 3000/max(page.rect.width, page.rect.height)), min(2, 3000/max(page.rect.width, page.rect.height))), alpha=False,annots=False).tobytes('png')
-                objects.sort(key=lambda obj:obj['seq'])
+                from paragraph_layout import group_paragraphs
+                objects=group_paragraphs(objects,page.rect.width,page.rect.height)
                 yield {'width': page.rect.width, 'height': page.rect.height, 'objects': objects, 'background': background}
 
 def export_layout(src, dst, fmt):
@@ -212,32 +215,8 @@ def layout_slides(src, dst, ocr_pages=None, progress=None):
                     shape.line.fill.background()
                 shape.name = '图形标注' if obj.get('vector') else '可替换图片'
             else:
-                top = obj['origin'][1] - obj['size']*.92
-                shape = slide.shapes.add_textbox(Pt(ox+x0*scale), Pt(oy+top*scale), Pt(max(x1-x0+3, obj['size'])*scale), Pt(max(y1-y0+3, obj['size']*1.6)*scale))
-                shape.line.fill.background()
-                shape.fill.background()
-                shape.name = '可编辑文字'
-                shape.rotation = obj['angle']
-                frame = shape.text_frame
-                frame.margin_left = frame.margin_right = frame.margin_top = frame.margin_bottom = 0
-                frame.word_wrap = False
-                frame.auto_size = MSO_AUTO_SIZE.NONE
-                frame.vertical_anchor = MSO_ANCHOR.TOP
-                p = frame.paragraphs[0]
-                p.space_before = p.space_after = Pt(0)
-                run = p.add_run()
-                run.text = obj['text']
-                run.font.name = font_name(obj['font'])
-                from pptx.oxml.xmlchemy import OxmlElement
-                for name in ['a:ea', 'a:cs']:
-                    element = OxmlElement(name)
-                    element.set('typeface', font_name(obj['font']))
-                    run._r.get_or_add_rPr().append(element)
-                run.font.size = Pt(obj['size']*scale)
-                run.font.bold = bool(obj['flags'] & 16)
-                run.font.italic = bool(obj['flags'] & 2)
-                c = obj['color']
-                run.font.color.rgb = RGBColor((c>>16)&255, (c>>8)&255, c&255)
+                from paragraph_layout import add_textbox
+                add_textbox(slide,obj,scale,ox,oy)
     presentation.save(dst)
 
 def anchored_picture(paragraph, data, rect, behind=False, vector=False, layer=100, name=None):
@@ -283,7 +262,10 @@ def anchored_text(paragraph, obj, scale, identifier):
     shape.set('stroked', 'f')
     x0,y0,x1,y1=obj['bbox']
     top=obj['origin'][1]-obj['size']*.92
-    shape.set('style', f'position:absolute;margin-left:{x0*scale:.3f}pt;margin-top:{top*scale:.3f}pt;width:{max(x1-x0+3,obj["size"])*scale:.3f}pt;height:{max(y1-y0+3,obj["size"]*1.8)*scale:.3f}pt;rotation:{obj["angle"]:.3f};z-index:{obj.get("seq",100)+100};mso-position-horizontal-relative:page;mso-position-vertical-relative:page;mso-wrap-style:none')
+    rows=obj.get('paragraph_rows',[obj])
+    height=max(y1-y0+obj['size']*.65,obj.get('line_spacing',obj['size'])*len(rows)+obj['size']*.65)
+    wrap='square' if obj.get('paragraph_rows') else 'none'
+    shape.set('style', f'position:absolute;margin-left:{x0*scale:.3f}pt;margin-top:{top*scale:.3f}pt;width:{(x1-x0+obj["size"]*.40)*scale:.3f}pt;height:{height*scale:.3f}pt;rotation:{obj["angle"]:.3f};z-index:{obj.get("seq",100)+100};mso-position-horizontal-relative:page;mso-position-vertical-relative:page;mso-wrap-style:{wrap}')
     textbox=etree.SubElement(shape,'{'+V+'}textbox')
     textbox.set('inset', '0,0,0,0')
     content=etree.SubElement(textbox,'{'+W+'}txbxContent')
@@ -295,32 +277,34 @@ def anchored_text(paragraph, obj, scale, identifier):
     spacing=etree.SubElement(props,'{'+W+'}spacing')
     spacing.set(qn('w:before'),'0')
     spacing.set(qn('w:after'),'0')
-    spacing.set(qn('w:line'),str(round(obj['size']*scale*1.2*20)))
+    spacing.set(qn('w:line'),str(round(obj.get('line_spacing',obj['size']*1.2)*scale*20)))
     spacing.set(qn('w:lineRule'),'exact')
-    run=etree.SubElement(p,'{'+W+'}r')
-    rpr=etree.SubElement(run,'{'+W+'}rPr')
-    fonts=etree.SubElement(rpr,'{'+W+'}rFonts')
-    for key in ['ascii','hAnsi','eastAsia','cs']:
-        # OCR fonts are exact installed family names. Preserve "Arial Narrow"
-        # rather than reducing it to Arial after computing its line width.
-        family=obj['font'] if 'width_ratio' in obj else font_name(obj['font'])
-        fonts.set(qn('w:'+key),family)
-    sz=etree.SubElement(rpr,'{'+W+'}sz')
-    sz.set(qn('w:val'),str(max(2,round(obj['size']*scale*2))))
-    if 'width_ratio' in obj:
-        char_spacing=(x1-x0)*(1-obj['width_ratio'])*scale/max(1,len(obj['text'])-1)
-        element=etree.SubElement(rpr,'{'+W+'}spacing')
-        element.set(qn('w:val'),str(round(max(-obj['size']*scale*.15,
-                                           min(obj['size']*scale*.3,char_spacing))*20)))
-    if obj['flags'] & 16:
-        etree.SubElement(rpr,'{'+W+'}b')
-    if obj['flags'] & 2:
-        etree.SubElement(rpr,'{'+W+'}i')
-    color=etree.SubElement(rpr,'{'+W+'}color')
-    color.set(qn('w:val'),f'{obj["color"]:06X}')
-    text=etree.SubElement(run,'{'+W+'}t')
-    text.set('{http://www.w3.org/XML/1998/namespace}space','preserve')
-    text.text=obj['text']
+    if obj.get('alignment')=='center':
+        align=etree.SubElement(props,'{'+W+'}jc')
+        align.set(qn('w:val'),'center')
+    for index,row in enumerate(rows):
+        if index:
+            breaking=etree.SubElement(p,'{'+W+'}r')
+            etree.SubElement(breaking,'{'+W+'}br')
+        for piece in row.get('runs',[row]):
+            run=etree.SubElement(p,'{'+W+'}r')
+            rpr=etree.SubElement(run,'{'+W+'}rPr')
+            fonts=etree.SubElement(rpr,'{'+W+'}rFonts')
+            for key in ['ascii','hAnsi','eastAsia','cs']:
+                fonts.set(qn('w:'+key),piece['font'])
+            sz=etree.SubElement(rpr,'{'+W+'}sz')
+            sz.set(qn('w:val'),str(max(2,round(piece['size']*scale*2))))
+            if 'width_ratio' in piece:
+                gap=(piece['bbox'][2]-piece['bbox'][0])*(1-piece['width_ratio'])/max(1,len(piece['text'])-1)
+                element=etree.SubElement(rpr,'{'+W+'}spacing')
+                element.set(qn('w:val'),str(round(max(-piece['size']*.08,min(piece['size']*.25,gap))*scale*20)))
+            if piece['flags'] & 16:etree.SubElement(rpr,'{'+W+'}b')
+            if piece['flags'] & 2:etree.SubElement(rpr,'{'+W+'}i')
+            color=etree.SubElement(rpr,'{'+W+'}color')
+            color.set(qn('w:val'),f'{piece["color"]:06X}')
+            text=etree.SubElement(run,'{'+W+'}t')
+            text.set('{http://www.w3.org/XML/1998/namespace}space','preserve')
+            text.text=piece['text']
     paragraph.add_run()._r.append(pict)
 
 

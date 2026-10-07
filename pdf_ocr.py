@@ -106,9 +106,13 @@ def text_objects(page):
                         'font':style['family'],'flags':(16 if style['bold'] else 0)|(2 if style['italic'] else 0),
                         'color':(red<<16)|(green<<8)|blue,'text':row['text'],'seq':index,
                         'width_ratio':style.get('width_ratio',1),
+                        'font_fit':style.get('fit',0),
+                        'panel_color':sum(v<<shift for v,shift in zip(row.get('background_color',[255,255,255]),(16,8,0))),
                         'angle':math.degrees(math.atan2(row['points'][1][1]-row['points'][0][1],
                                                        row['points'][1][0]-row['points'][0][0]))})
-    return objects
+    from paragraph_layout import group_paragraphs
+    grouped=group_paragraphs(objects+graphic_objects(page),page['page_width'],page['page_height'])
+    return [obj for obj in grouped if obj['kind']=='text']
 
 
 def graphic_objects(page):
@@ -202,53 +206,10 @@ def add_ocr_slide(presentation,page,scale,ox,oy):
     image.line.fill.background()
     for obj in graphic_objects(page):
         add_graphic(slide,obj,scale,ox,oy)
-    factor=page['page_width']/page['width']*scale
-    for row in page.get('lines', []):
-        x0,y0,x1,y1=row['glyph_bbox']
-        style=row['style']
-        # Font bbox and ascender determine the glyph's actual baseline. Textbox
-        # coordinates are not the same as the black-pixel bounds in a scan.
-        font_size=style['size_px']*factor
-        from PIL import ImageFont
-        from ocr_layout import fonts
-        match=next((p for family,p,bold,italic in fonts() if (family,bold,italic)==
-                    (style['family'],style['bold'],style['italic'])),None)
-        top_offset=0
-        if match:
-            font=ImageFont.truetype(match,max(5,round(style['size_px'])))
-            box=font.getbbox(row['text'])
-            ascent,_=font.getmetrics()
-            top_offset=(box[1]-ascent)*factor+font_size*.92
-        top=oy+y0*factor-top_offset
-        width=max((x1-x0)*factor+font_size*.18,font_size)
-        height=max((y1-y0)*factor+font_size*.6,font_size*1.6)
-        shape=slide.shapes.add_textbox(Pt(ox+x0*factor),Pt(top),Pt(width),Pt(height))
-        shape.name=f'OCR 可编辑文字（置信度 {row["confidence"]:.0%}）'
-        shape.rotation=math.degrees(math.atan2(row['points'][1][1]-row['points'][0][1],
-                                              row['points'][1][0]-row['points'][0][0]))
-        frame=shape.text_frame
-        frame.margin_left=frame.margin_right=frame.margin_top=frame.margin_bottom=0
-        frame.word_wrap=False
-        frame.auto_size=MSO_AUTO_SIZE.NONE
-        frame.vertical_anchor=MSO_ANCHOR.TOP
-        paragraph=frame.paragraphs[0]
-        paragraph.space_before=paragraph.space_after=Pt(0)
-        run=paragraph.add_run()
-        run.text=''.join(c for c in row['text'] if c in '\t\n' or ord(c)>=32)
-        run.font.name=style['family']
-        run.font.size=Pt(max(1,font_size))
-        run.font.bold=style['bold']
-        run.font.italic=style['italic']
-        run.font.color.rgb=RGBColor(*row['color'])
-        props=run._r.get_or_add_rPr()
-        for name in ['a:ea','a:cs']:
-            element=OxmlElement(name)
-            element.set('typeface',style['family'])
-            props.append(element)
-        # Keep each line's original width even when substituting the font.
-        spacing=(x1-x0)*(1-style.get('width_ratio',1))*factor/max(1,len(row['text'])-1)
-        props.set('spc',str(round(max(-font_size*.15,min(font_size*.3,spacing))*100)))
-    description=('本页文字由本机 OCR 重建，可直接编辑；字体为相近匹配。'
+    from paragraph_layout import add_textbox
+    for obj in text_objects(page):
+        add_textbox(slide,obj,scale,ox,oy)
+    description=('本页文字由本机 OCR 重建，同段文字已合并为可编辑文段；字体为相近匹配。'
                  if page.get('lines') else '本页经过版面分析与对象分离。')
     if page.get('images'):
         description+='已分离的图片可单独移动、缩放、裁剪或替换。'

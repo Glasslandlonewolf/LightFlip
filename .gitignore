@@ -16,6 +16,7 @@ qa-*/
 .lightflip-*/
 .image-object-test-*/
 .circle-artwork-test-*/
+.paragraph-test-*/
 offline-package/
 *.lnk
 lightflip-install.json
