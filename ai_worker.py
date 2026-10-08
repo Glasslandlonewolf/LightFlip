@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def progress(message):
-    print(json.dumps({'progress': message}, ensure_ascii=False), flush=True)
+    if sys.stdout is not None:
+        print(json.dumps({'progress': message}, ensure_ascii=False), flush=True)
 
 
 def main(job):

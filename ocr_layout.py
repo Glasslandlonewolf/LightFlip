@@ -7,6 +7,8 @@ from pathlib import Path
 import math
 import os
 import re
+import sys
+from functools import lru_cache
 
 
 def make_engine():
@@ -83,7 +85,21 @@ def recognize(engine, image):
     return sorted(lines, key=lambda row: (round(row['bbox'][1]/12), row['bbox'][0]))
 
 
+@lru_cache(maxsize=1)
 def fonts():
+    if sys.platform=='darwin':
+        from PIL import ImageFont
+        roots=[Path('/System/Library/Fonts'),Path('/Library/Fonts'),Path.home()/'Library/Fonts']
+        candidates=[]
+        for root in roots:
+            for path in sorted(root.rglob('*')) if root.is_dir() else []:
+                if path.suffix.lower() not in {'.ttf','.ttc','.otf'}:continue
+                try:
+                    family,style=ImageFont.truetype(str(path),20).getname()
+                    if not any(name in family.lower() for name in ('arial','times','helvetica','avenir','georgia','palatino','pingfang','songti','heiti','hiragino','noto')):continue
+                    candidates.append((family,str(path),'bold' in style.lower(),'italic' in style.lower() or 'oblique' in style.lower()))
+                except (OSError,ValueError):pass
+        return candidates
     root = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
     choices = [('Arial', 'arial.ttf', False, False), ('Arial', 'arialbd.ttf', True, False),
                ('Times New Roman', 'times.ttf', False, False), ('Times New Roman', 'timesbd.ttf', True, False),
@@ -122,7 +138,7 @@ def fit_font(text, glyph_mask, font_choices):
     options = []
     chinese = bool(re.search(r'[\u3400-\u9fff]', text))
     for family, path, bold, italic in font_choices:
-        if chinese and family not in {'Microsoft YaHei', 'SimSun'}:
+        if chinese and family not in {'Microsoft YaHei', 'SimSun'} and not any(token in family.lower() for token in ('pingfang','songti','heiti','hiragino','cjk','han')):
             continue
         base = ImageFont.truetype(path, 100)
         box = base.getbbox(text)

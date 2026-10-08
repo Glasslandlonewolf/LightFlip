@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import subprocess
 import tempfile
+from platform_support import process_options
 
 IMAGES = {'png', 'jpg', 'jpeg', 'webp', 'bmp', 'tif', 'tiff', 'gif'}
 AUDIO = {'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'}
@@ -49,6 +50,9 @@ def formats(path):
     return [target for target in candidates if conversion_route(path, target)]
 
 def office_available(ext):
+    if os.name != 'nt':
+        from platform_support import libreoffice
+        return bool(libreoffice())
     import winreg
     app = 'Word' if ext == 'docx' else 'PowerPoint' if ext == 'pptx' else 'Excel'
     try:
@@ -127,7 +131,7 @@ def convert(source, target_format, mode='pages', progress=None):
                 if target_format in {'avi', 'wmv'}:
                     command += ['-ac', '2']
             command += ['-y', str(temp)]
-            result = subprocess.run(command, capture_output=True, creationflags=0x08000000)
+            result = subprocess.run(command, capture_output=True, **process_options())
             if result.returncode:
                 raise RuntimeError(result.stderr.decode('utf-8', errors='replace')[-1200:])
         else:
@@ -179,12 +183,29 @@ def publish(temp, folder, stem, ext):
     while True:
         dest = folder / (stem + (f'-{index}' if index else '') + '.' + ext)
         try:
-            os.rename(temp, dest)  # Windows refuses an existing destination.
+            if os.name == 'nt':
+                os.rename(temp, dest)
+            else:
+                # POSIX rename overwrites existing files. Reserve the name
+                # atomically before copying; never replace a user's original.
+                import shutil
+                try:
+                    with dest.open('xb') as output, Path(temp).open('rb') as source:
+                        shutil.copyfileobj(source, output)
+                except FileExistsError:
+                    raise
+                except Exception:
+                    dest.unlink(missing_ok=True)
+                    raise
+                Path(temp).unlink()
             return dest
         except FileExistsError:
             index += 1
 
 def office_pdf(src, dst, ext):
+    if os.name != 'nt':
+        from platform_support import office_to_pdf
+        return office_to_pdf(src,dst)
     import pythoncom
     import win32com.client
     pythoncom.CoInitialize()

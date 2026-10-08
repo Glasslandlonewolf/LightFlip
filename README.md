@@ -1,8 +1,10 @@
 # 轻转 · LightFlip
 
-Windows 本地文件转换与处理工具。拖动文件时按住 **Shift**，在鼠标旁的轮盘选择目标格式；也可以在主窗口拖入文件批量转换。
+Windows / macOS 本地文件转换与处理工具，也可以在主窗口拖入文件批量转换。
 
 这是 0.4.0 测试版，适用于 Windows 10 / 11 的 64 位 Intel 或 AMD 电脑。交互参考 FileFlip 的拖放轮盘思路，轻转是独立的 Windows 实现，并非 FileFlip 或 FileFlipper 官方产品。
+
+macOS 版提供 Apple Silicon 和 Intel 两种原生打包流程，保留文段与独立图片编辑能力。Mac 上使用 Command＋1 / Command＋2 打开轮盘，关闭窗口退出，Office 渲染使用 LibreOffice；详见 [Mac 使用说明](macos/使用说明.md)。原生构建的自动检查通过后才会生成应用 ZIP。
 
 ## 下载与安装
 

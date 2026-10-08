@@ -1,0 +1,41 @@
+name: Build macOS app
+on:
+  push:
+    branches: [main]
+    paths: ['**.py', 'requirements*.txt', 'macos/**', '.github/workflows/macos.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt -r requirements-ocr.txt 'pyinstaller>=6.15,<7'
+          brew install --cask libreoffice
+      - name: Cache offline OCR models
+        run: python tools/cache_ocr_models.py
+      - name: Build and test native app
+        run: python tools/build_macos.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LightFlip-0.4.0-macOS-${{ matrix.arch }}
+          path: |
+            macos-dist/*.zip
+            macos-dist/self-test-*.json
+          if-no-files-found: error
+          retention-days: 30

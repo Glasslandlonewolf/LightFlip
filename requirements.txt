@@ -1,8 +1,8 @@
 # Tested main runtime: Windows x64, Python 3.14.
 Pillow==12.3.0
 tkinterdnd2==0.6.3
-pystray==0.19.5
-pywin32==312
+pystray==0.19.5; sys_platform == "win32"
+pywin32==312; sys_platform == "win32"
 imageio-ffmpeg==0.6.0
 markitdown[docx,pdf,pptx,xls,xlsx]==0.1.8
 pypdfium2==5.13.0

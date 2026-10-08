@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import sys
+from platform_support import process_options
 from dataclasses import dataclass
 
 from core import IMAGES, VIDEO, normalized_format, publish
@@ -55,6 +57,8 @@ def tool_runtime():
     local = Path(__file__).resolve().parent
     if (local / 'tools-venv/Scripts/python.exe').is_file() or (local / 'ocr-runtime/python.exe').is_file():
         return local
+    if os.name != 'nt':
+        return local
     return Path(os.environ['LOCALAPPDATA']) / 'Programs/LightFlip'
 
 
@@ -63,6 +67,8 @@ def ai_job(job, work, progress):
     interpreter = runtime / 'tools-venv/Scripts/python.exe'
     if not interpreter.is_file():
         interpreter = runtime / 'ocr-runtime/python.exe'
+    if os.name != 'nt':
+        interpreter=Path(sys.executable)
     if not interpreter.is_file():
         raise RuntimeError('OCR 组件未安装，请修复轻转安装。')
     request = work / 'job.json'
@@ -73,11 +79,14 @@ def ai_job(job, work, progress):
     env['OMP_NUM_THREADS'] = '4'
     env.pop('PYTHONHOME', None)
     env.pop('PYTHONPATH', None)
-    command = [str(interpreter), '-I', '-X', 'utf8', str(Path(__file__).with_name('ai_worker.py')), str(request), str(response)]
+    if getattr(sys,'frozen',False):
+        command=[sys.executable,'--lightflip-ocr',str(request),str(response)]
+    else:
+        command = [str(interpreter), '-I', '-X', 'utf8', str(Path(__file__).with_name('ai_worker.py')), str(request), str(response)]
     # Line events only; model diagnostics go to a private temporary log.
     with (work / 'ai.log').open('w', encoding='utf-8') as log:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=log,
-                                   text=True, encoding='utf-8', env=env, creationflags=0x08000000)
+                                   text=True, encoding='utf-8', env=env, **process_options())
         for line in process.stdout:
             try:
                 event = json.loads(line)
@@ -367,7 +376,7 @@ def video_tool(source, work, key, options):
         else:
             command += ['-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2']
     command.append(str(destination))
-    result = subprocess.run(command, capture_output=True, creationflags=0x08000000)
+    result = subprocess.run(command, capture_output=True, **process_options())
     if result.returncode or not destination.is_file() or destination.stat().st_size == 0:
         diagnostic = result.stderr.decode('utf-8', errors='replace')
         if key == 'audio' and ('matches no streams' in diagnostic or 'Stream map' in diagnostic):

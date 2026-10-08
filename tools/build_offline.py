@@ -11,7 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 APP_FILES = ('app.py', 'core.py', 'file_tools.py', 'office_export.py',
              'pdf_layout.py', 'pdf_ocr.py', 'ocr_layout.py', 'image_layout.py', 'paragraph_layout.py', 'tool_dialogs.py', 'ai_worker.py',
-             'launcher.py', 'offline_installer.py')
+             'launcher.py', 'offline_installer.py', 'platform_support.py')
 
 def ignored(directory, names):
     return [name for name in names if name == '__pycache__' or name.endswith(('.pyc', '.pyo'))]

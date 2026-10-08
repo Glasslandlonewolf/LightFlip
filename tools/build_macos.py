@@ -1,0 +1,58 @@
+"""Build and test a native, self-contained app on macOS (never cross-compile)."""
+import argparse
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--output',type=Path,default=Path('macos-dist'))
+    args=parser.parse_args()
+    if sys.platform!='darwin':
+        parser.error('This app must be built on macOS.')
+    root=Path(__file__).resolve().parents[1]
+    output=args.output.resolve();output.mkdir(parents=True,exist_ok=True)
+    arch=platform.machine()
+    build=output/('build-'+arch)
+    command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--windowed',
+             '--onedir','--name','LightFlip','--osx-bundle-identifier','org.lightflip.desktop',
+             '--target-architecture',arch,'--distpath',str(build/'dist'),
+             '--workpath',str(build/'work'),'--specpath',str(build),
+             '--paths',str(root)]
+    for package in ('rapidocr','onnxruntime','cv2','tkinterdnd2','imageio_ffmpeg','pypdfium2','markitdown'):
+        command+=['--collect-all',package]
+    for module in ('app','core','office_export','file_tools','tool_dialogs','ai_worker',
+                   'ocr_layout','paragraph_layout','image_layout','pdf_layout','pdf_ocr','platform_support','macos_smoke'):
+        command+=['--hidden-import',module]
+    command.append(str(root/'launcher.py'))
+    subprocess.run(command,cwd=root,check=True)
+    app=build/'dist/LightFlip.app'
+    report=output/('self-test-'+arch+'.json')
+    subprocess.run([str(app/'Contents/MacOS/LightFlip'),'--lightflip-self-test',str(report)],check=True,timeout=360)
+    import json
+    if not json.loads(report.read_text())['passed']:
+        raise RuntimeError('Packaged application failed its native self-test.')
+    release=output/('LightFlip-0.4.0-macOS-'+arch)
+    release.mkdir(exist_ok=True)
+    subprocess.run(['ditto',str(app),str(release/'LightFlip.app')],check=True)
+    shutil.copy2(root/'macos/使用说明.md',release/'使用说明.md')
+    shutil.copy2(root/'LICENSE',release/'LICENSE')
+    shutil.copy2(root/'THIRD_PARTY_NOTICES.md',release/'THIRD_PARTY_NOTICES.md')
+    shutil.copytree(root/'licenses',release/'licenses',dirs_exist_ok=True)
+    source=release/'source';source.mkdir(exist_ok=True)
+    for file in root.glob('*.py'):
+        shutil.copy2(file,source/file.name)
+    for name in ('README.md','LICENSE','requirements.txt','requirements-ocr.txt'):
+        shutil.copy2(root/name,source/name)
+    shutil.copytree(root/'tools',source/'tools',ignore=shutil.ignore_patterns('__pycache__'),dirs_exist_ok=True)
+    shutil.copytree(root/'macos',source/'macos',dirs_exist_ok=True)
+    shutil.copy2(report,release/'self-test.json')
+    archive=output/(release.name+'.zip')
+    subprocess.run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(release),str(archive)],check=True)
+    print(archive)
+
+if __name__=='__main__':
+    main()

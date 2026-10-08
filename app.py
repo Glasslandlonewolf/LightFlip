@@ -1,5 +1,6 @@
 import ctypes
 import os
+import sys
 from pathlib import Path
 import queue
 import threading
@@ -10,12 +11,15 @@ from tkinterdnd2 import TkinterDnD, DND_FILES
 from core import formats, convert, document_has_pages, DOCUMENTS, OFFICE_INPUTS, IMAGE_TARGETS
 from file_tools import available_tools, execute_tool, TOOL_MAP
 from tool_dialogs import choose_options
+from platform_support import open_folder
+
+UI_FONT = 'PingFang SC' if sys.platform == 'darwin' else 'Microsoft YaHei UI'
 
 class App:
     def __init__(self, reopen_event=None):
         self.reopen_event = reopen_event
         self.root = TkinterDnD.Tk()
-        self.root.title('轻转 0.4.0 · Windows 文件转换')
+        self.root.title('轻转 0.4.0 · 文件转换')
         self.root.geometry('720x650')
         self.root.minsize(680, 630)
         self.root.configure(bg='#f3f5fa')
@@ -27,9 +31,9 @@ class App:
         self.gesture = False
         self.tool_wheel = False
         self.tray = None
-        tk.Label(self.root, text='轻转', font=('Microsoft YaHei UI', 28, 'bold'), bg='#f3f5fa', fg='#25314d').pack(pady=(22, 2))
+        tk.Label(self.root, text='轻转', font=(UI_FONT, 28, 'bold'), bg='#f3f5fa', fg='#25314d').pack(pady=(22, 2))
         tk.Label(self.root, text='一个入口，转换图片、文档、音频和视频', bg='#f3f5fa', fg='#65708a').pack()
-        self.drop = tk.Label(self.root, text='把文件拖到这里\n或点击选择文件', bg='white', fg='#425bdb', font=('Microsoft YaHei UI', 15), height=4, cursor='hand2')
+        self.drop = tk.Label(self.root, text='把文件拖到这里\n或点击选择文件', bg='white', fg='#425bdb', font=(UI_FONT, 15), height=4, cursor='hand2')
         self.drop.pack(fill='x', padx=26, pady=18)
         self.drop.bind('<Button-1>', lambda e: self.select(filedialog.askopenfilenames()))
         self.register_drop(self.drop, self.dropped)
@@ -46,10 +50,25 @@ class App:
         self.progress_bar = ttk.Progressbar(self.root, mode='indeterminate', length=360)
         self.progress_bar.pack(pady=(0, 10))
         tk.Button(self.root, text='打开输出文件夹', command=self.open_output).pack()
-        tk.Label(self.root, text='拖动文件＋Shift：格式轮盘；Shift＋Alt：工具轮盘。\n合并时请一起选择多个文件；输出放在原文件旁边，保留原文件。', bg='#f3f5fa', fg='#65708a', font=('Microsoft YaHei UI', 9)).pack(side='bottom', pady=12)
+        hint = ('Command＋1：格式轮盘；Command＋2：工具轮盘。' if sys.platform == 'darwin' else '拖动文件＋Shift：格式轮盘；Shift＋Alt：工具轮盘。')
+        tk.Label(self.root, text=hint+'\n合并时请一起选择多个文件；输出放在原文件旁边，保留原文件。', bg='#f3f5fa', fg='#65708a', font=(UI_FONT, 9)).pack(side='bottom', pady=12)
         self.root.after(100, self.poll)
-        self.root.protocol('WM_DELETE_WINDOW', self.hide)
-        self.start_tray()
+        self.root.protocol('WM_DELETE_WINDOW', self.hide if os.name == 'nt' else self.root.destroy)
+        if os.name == 'nt':
+            self.start_tray()
+        if sys.platform == 'darwin':
+            self.root.bind('<Command-Key-1>', lambda event: self.open_wheel(False))
+            self.root.bind('<Command-Key-2>', lambda event: self.open_wheel(True))
+            self.root.bind('<Escape>', lambda event: self.close_popup())
+            self.root.createcommand('::tk::mac::OpenDocument', lambda *paths: self.select(paths))
+            self.root.createcommand('::tk::mac::Quit', self.root.destroy)
+            self.root.createcommand('::tk::mac::ReopenApplication', self.root.deiconify)
+
+    def open_wheel(self, tools=False):
+        if self.busy or self.root.grab_current() is not None:
+            return
+        self.close_popup()
+        self.show_popup(tools)
 
     def hide(self):
         self.root.withdraw()
@@ -181,7 +200,7 @@ class App:
         def choose(value):
             selected[0] = value
             dialog.destroy()
-        tk.Label(dialog, text='选择转换方式', font=('Microsoft YaHei UI', 14, 'bold')).pack(padx=24, pady=(18, 12))
+        tk.Label(dialog, text='选择转换方式', font=(UI_FONT, 14, 'bold')).pack(padx=24, pady=(18, 12))
         tk.Button(dialog, text='保留布局并编辑（文字＋图片）', width=34, command=lambda: choose('layout')).pack(padx=24, pady=4)
         hint='同段文字合并为一个可编辑文段，分离照片、小图和简单形状。\n图片可单独移动、缩放、裁剪和替换；复杂版面请校对。'
         tk.Label(dialog,text=hint).pack(padx=24,pady=(0,12))
@@ -214,11 +233,11 @@ class App:
         canvas = tk.Canvas(self.popup, width=420, height=420, bg='#25314d', highlightthickness=0)
         canvas.pack()
         canvas.create_oval(60, 60, 360, 360, outline='#65708a', width=2)
-        canvas.create_text(210, 205, text='轻转\n松手到工具上\n中间松手取消' if tools else '轻转\n松手到格式上\n中间松手取消', fill='white', justify='center', font=('Microsoft YaHei UI', 12))
+        canvas.create_text(210, 205, text='轻转\n松手到工具上\n中间松手取消' if tools else '轻转\n松手到格式上\n中间松手取消', fill='white', justify='center', font=(UI_FONT, 12))
         choices = ['crop', 'image_compress', 'half', 'rotate', 'images_pdf', 'pdf_merge', 'ocr', 'video_compress'] if tools else ['png', 'jpg', 'gif', 'webp', 'pdf', 'docx', 'pptx', 'md', 'txt', 'mp4', 'mp3', 'wav']
         for index, fmt in enumerate(choices):
             angle = 2*math.pi*index/len(choices) - math.pi/2
-            label = tk.Label(canvas, text=TOOL_MAP[fmt].label if tools else self.format_label(fmt), bg='#edf0ff', fg='#25314d', width=9 if tools else 7, height=2, font=('Microsoft YaHei UI', 9, 'bold'))
+            label = tk.Label(canvas, text=TOOL_MAP[fmt].label if tools else self.format_label(fmt), bg='#edf0ff', fg='#25314d', width=9 if tools else 7, height=2, font=(UI_FONT, 9, 'bold'))
             canvas.create_window(210+150*math.cos(angle), 210+150*math.sin(angle), window=label)
             self.register_drop(label, lambda e, f=fmt: self.quick_tool(e, f) if tools else self.quick_drop(e, f))
             label.dnd_bind('<<DropEnter>>', lambda e, w=label: self.highlight(w, True))
@@ -258,7 +277,7 @@ class App:
 
     def open_output(self):
         if self.output:
-            os.startfile(str(self.output.parent))
+            open_folder(self.output.parent)
 
     def poll(self):
         if self.reopen_event and ctypes.windll.kernel32.WaitForSingleObject(ctypes.c_void_p(self.reopen_event), 0) == 0:
@@ -296,6 +315,9 @@ class App:
                 messagebox.showerror('部分文件未完成', '\n\n'.join(errors))
         except queue.Empty:
             pass
+        if os.name != 'nt':
+            self.root.after(100, self.poll)
+            return
         user = ctypes.windll.user32
         mouse_down = bool(user.GetAsyncKeyState(0x01) & 0x8000)
         held = bool(user.GetAsyncKeyState(0x10) & 0x8000 and mouse_down)
@@ -312,7 +334,10 @@ class App:
             self.root.after(500, self.close_popup)
         self.root.after(100, self.poll)
 
-if __name__ == '__main__':
+def run_app():
+    if os.name != 'nt':
+        App().root.mainloop()
+        return
     from ctypes import wintypes
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
@@ -327,3 +352,6 @@ if __name__ == '__main__':
         kernel.SetEvent(event)
     else:
         App(event).root.mainloop()
+
+if __name__ == '__main__':
+    run_app()

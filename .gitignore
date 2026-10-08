@@ -23,3 +23,6 @@ lightflip-install.json
 startup-error.txt
 .DS_Store
 Thumbs.db
+macos-dist/
+.venv-macos/
+.platform-test-*/
