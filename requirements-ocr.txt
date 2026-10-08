@@ -3,4 +3,5 @@ rapidocr==3.9.2
 onnxruntime==1.30.0; sys_platform != "darwin"
 # The last available native Intel Mac wheel is 1.23.2; use it on both Mac chips.
 onnxruntime==1.23.2; sys_platform == "darwin"
-
+opencv-python==4.11.0.86; sys_platform == "darwin"
+numpy==2.2.6; sys_platform == "darwin"

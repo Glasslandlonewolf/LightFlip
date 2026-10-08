@@ -22,7 +22,9 @@ def main():
              '--target-architecture',arch,'--distpath',str(build/'dist'),
              '--workpath',str(build/'work'),'--specpath',str(build),
              '--paths',str(root),'--additional-hooks-dir',str(root/'tools/macos-hooks')]
-    for package in ('rapidocr','onnxruntime','cv2','imageio_ffmpeg','pypdfium2','markitdown'):
+    # OpenCV's bootstrap replaces its own module. Its dedicated PyInstaller
+    # hook controls source/binary placement; generic collect-all interferes.
+    for package in ('rapidocr','onnxruntime','imageio_ffmpeg','pypdfium2','markitdown'):
         command+=['--collect-all',package]
     for module in ('app','core','office_export','file_tools','tool_dialogs','ai_worker',
                    'ocr_layout','paragraph_layout','image_layout','pdf_layout','pdf_ocr','platform_support','macos_smoke'):
