@@ -40,6 +40,13 @@ def main():
     command.append(str(root/'launcher.py'))
     subprocess.run(command,cwd=root,check=True)
     app=build/'dist/LightFlip.app'
+    import plistlib
+    plist=app/'Contents/Info.plist'
+    info=plistlib.loads(plist.read_bytes())
+    info.update(CFBundleShortVersionString='0.4.0',CFBundleVersion='0.4.0',CFBundleDisplayName='轻转')
+    plist.write_bytes(plistlib.dumps(info))
+    subprocess.run(['codesign','--force','--sign','-',str(app)],check=True)
+    subprocess.run(['codesign','--verify','--deep','--strict',str(app)],check=True)
     report=output/('self-test-'+arch+'.json')
     subprocess.run([str(app/'Contents/MacOS/LightFlip'),'--lightflip-self-test',str(report)],check=True,timeout=360)
     import json
