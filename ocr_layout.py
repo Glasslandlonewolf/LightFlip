@@ -90,6 +90,9 @@ def fonts():
     if sys.platform=='darwin':
         from PIL import ImageFont
         roots=[Path('/System/Library/Fonts'),Path('/Library/Fonts'),Path.home()/'Library/Fonts']
+        # Some macOS releases store Chinese font collections in system assets.
+        assets=Path('/System/Library/AssetsV2')
+        if assets.is_dir():roots+=list(assets.glob('com_apple_MobileAsset_Font*'))
         candidates=[]
         for root in roots:
             for path in sorted(root.rglob('*')) if root.is_dir() else []:

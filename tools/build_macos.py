@@ -26,6 +26,14 @@ def main():
     # hook controls source/binary placement; generic collect-all interferes.
     for package in ('rapidocr','onnxruntime','imageio_ffmpeg','pypdfium2','markitdown'):
         command+=['--collect-all',package]
+    # OpenCV's Python bootstrap substitutes its own package via sys.path.
+    # Use its native extension directly in frozen builds; this avoids the
+    # package loader recursing through Frameworks/Resources symlinks.
+    import cv2
+    extensions=list(Path(cv2.__file__).parent.rglob('cv2*.so'))
+    if len(extensions)!=1:
+        raise RuntimeError('Expected exactly one native OpenCV extension')
+    command+=['--exclude-module','cv2','--add-binary',str(extensions[0])+':.']
     for module in ('app','core','office_export','file_tools','tool_dialogs','ai_worker',
                    'ocr_layout','paragraph_layout','image_layout','pdf_layout','pdf_ocr','platform_support','macos_smoke'):
         command+=['--hidden-import',module]
