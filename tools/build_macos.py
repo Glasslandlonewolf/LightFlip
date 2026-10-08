@@ -24,7 +24,7 @@ def main():
              '--paths',str(root),'--additional-hooks-dir',str(root/'tools/macos-hooks')]
     # OpenCV's bootstrap replaces its own module. Its dedicated PyInstaller
     # hook controls source/binary placement; generic collect-all interferes.
-    for package in ('rapidocr','onnxruntime','imageio_ffmpeg','pypdfium2','markitdown'):
+    for package in ('rapidocr','onnxruntime','imageio_ffmpeg','pypdfium2','markitdown','pptx','docx'):
         command+=['--collect-all',package]
     # OpenCV's Python bootstrap substitutes its own package via sys.path.
     # Use its native extension directly in frozen builds; this avoids the
