@@ -1,3 +1,6 @@
 # Tested OCR runtime: Windows x64, Python 3.12.
 rapidocr==3.9.2
-onnxruntime==1.30.0
+onnxruntime==1.30.0; sys_platform != "darwin"
+# The last available native Intel Mac wheel is 1.23.2; use it on both Mac chips.
+onnxruntime==1.23.2; sys_platform == "darwin"
+
