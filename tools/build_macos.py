@@ -52,6 +52,16 @@ def main():
     shutil.copytree(root/'tools',source/'tools',ignore=shutil.ignore_patterns('__pycache__'),dirs_exist_ok=True)
     shutil.copytree(root/'macos',source/'macos',dirs_exist_ok=True)
     shutil.copy2(report,release/'self-test.json')
+    # Record the actual native runtime and bundled FFmpeg build, which differ
+    # from the Windows portable package.
+    manifest=release/'build-info';manifest.mkdir(exist_ok=True)
+    from imageio_ffmpeg import get_ffmpeg_exe
+    for name,command in [('python-packages.txt',[sys.executable,'-m','pip','freeze']),
+                         ('ffmpeg-version.txt',[get_ffmpeg_exe(),'-version']),
+                         ('ffmpeg-buildconf.txt',[get_ffmpeg_exe(),'-buildconf']),
+                         ('ffmpeg-license.txt',[get_ffmpeg_exe(),'-L'])]:
+        result=subprocess.run(command,check=True,capture_output=True,text=True)
+        (manifest/name).write_text(result.stdout+result.stderr,encoding='utf-8')
     archive=output/(release.name+'.zip')
     subprocess.run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(release),str(archive)],check=True)
     print(archive)

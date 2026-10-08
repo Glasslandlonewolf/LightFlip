@@ -19,6 +19,8 @@
 | RapidOCR / 模型 | 本地中英文 OCR | [RapidOCR](https://github.com/RapidAI/RapidOCR)，Apache-2.0；保留模型及相关上游声明 |
 | ONNX Runtime | OCR 模型推理 | [ONNX Runtime](https://github.com/microsoft/onnxruntime)，MIT，保留第三方声明 |
 
+macOS 应用不包含 pywin32 或 pystray。Mac 音视频转换使用 imageio-ffmpeg 对应芯片的上游二进制；Windows 表中的 Gyan 构建不用于 Mac。Mac 包的 `build-info/` 保存实际依赖版本、FFmpeg 版本、构建配置与许可输出，分发材料应按这些实际版本核对。LibreOffice 由用户另行安装，不嵌入轻转应用。
+
 其余传递依赖的许可保留在相应包或 `*.dist-info` 目录。离线打包工具保留这些目录，不将全部依赖重新许可为轻转的许可证。
 
 ## 二进制包的源码与构建信息

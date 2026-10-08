@@ -64,6 +64,16 @@ def main(report):
         result=ai_job({'kind':'ocr_text','files':[str(source)]},folder,lambda text:None)
         assert 'lightflip' in result['items'][0]['text'].lower(),result
         checks.append('Bundled offline OCR via separate worker process')
+        for fmt in ('pptx','docx'):
+            editable=convert(source,fmt,mode='ocr')[0]
+            if fmt=='pptx':
+                contents=' '.join(s.text for s in Presentation(editable).slides[0].shapes if s.has_text_frame)
+            else:
+                with zipfile.ZipFile(editable) as package:
+                    node=etree.fromstring(package.read('word/document.xml'))
+                    contents=' '.join(node.xpath('//w:t/text()',namespaces=ns))
+            assert 'lightflip' in contents.lower(),contents
+        checks.append('Scanned image to editable PPT/Word using installed Mac fonts')
         from imageio_ffmpeg import get_ffmpeg_exe
         subprocess.run([get_ffmpeg_exe(),'-version'],check=True,capture_output=True)
         checks.append('Bundled FFmpeg started')
